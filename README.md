@@ -1,51 +1,62 @@
-# ESP32 Marauder N16 builds
+# ESP32 Marauder N16
 
-This repository is a curated fork of [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder), based on v1.20.0 (commit `511bb36`). It contains a tested headless build for **ESP32-C5 DevKitC-1 N16R8** and the source changes used for its BLE console and 16 MB layout.
+Готовая сборка ESP32 Marauder v1.20.0 для **ESP32-C5 DevKitC-1 N16R8** с флеш-памятью 16 MB и BLE-консолью. Основа проекта — [ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder), commit `511bb36`. Лицензия и уведомление об авторстве находятся в `LICENSE` и `NOTICE.md`.
 
-## Supported hardware
+## Поддерживаемые платы
 
-| Target | Status | Build settings |
-| --- | --- | --- |
-| ESP32-C5 DevKitC-1 N16R8 | Tested | `esp32:esp32:esp32c5:FlashSize=16M,PartitionScheme=custom,PSRAM=enabled,CDCOnBoot=default` |
-| Generic ESP32-S3 N16 | Source profile only | Must be compiled and tested on the exact board before flashing |
+| Плата | Состояние |
+| --- | --- |
+| ESP32-C5 DevKitC-1 N16R8 | Проверено на реальной плате |
+| ESP32-S3 N16 | Только исходный шаблон; готового универсального бинарника нет |
 
-The C5 and S3 are different chips. **Never flash the C5 binary onto an S3.** The S3 profile is intentionally not advertised as a ready-made universal binary: pinout, PSRAM mode, USB, and radio support vary between boards.
+**Нельзя прошивать бинарник C5 в ESP32-S3.** Это разные микросхемы. Для S3 нужно отдельно проверить распиновку, USB, PSRAM, антенну и загрузчик конкретной платы.
 
-## What is included
+## Прошивка ESP32-C5 N16R8
 
-- Full source tree, including the local BLE console changes.
-- `partitions/partitions-16mb.csv`, with two OTA app slots and a large SPIFFS area.
-- A verified C5 application binary in `firmware/esp32-c5-n16r8/`.
-- License and attribution for the upstream MIT project.
+### Полный образ (рекомендуется)
 
-## Flashing the verified C5 build
+В `firmware/esp32-c5-n16r8/` находится `merged-v1.20.0-ble.bin` — полный образ на 16 MB, запись начинается с `0x0`.
 
-Use `esptool` or Arduino IDE with the matching board profile. The application binary alone is not a complete factory image; use the bootloader, partition table, and application addresses from the release manifest. Verify the SHA-256 sums before flashing.
-
-This firmware is for authorized lab work and networks you own or have permission to test. MAC randomization and local network scans do not grant permission to bypass access controls. Deauthentication and similar radio tests can disrupt other users and should only be performed in an isolated test setup with explicit authorization.
-
-## Building from source
-
-The checked-in source is portable. Install Arduino-ESP32 3.3.2, select the C5 16 MB custom partition profile, and build the `esp32_marauder` sketch with `-DMARAUDER_C5`. The original upstream workflow is retained as reference in the source history; local machine paths and caches are not included.
-
-## Publishing on GitHub
-
-From this directory in PowerShell:
+1. Подключи плату по USB и узнай её COM-порт.
+2. Установи esptool: `py -m pip install esptool`.
+3. Зажми **BOOT**, нажми **RESET**, отпусти **BOOT**.
+4. Замени `COM8` на свой порт и выполни:
 
 ```powershell
-git init
-git add .
-git commit -m "Add tested ESP32-C5 N16 Marauder build"
-gh auth login
-gh repo create esp32-marauder-n16 --public --source . --push
+py -m esptool --chip esp32c5 --port COM8 erase-flash
+py -m esptool --chip esp32c5 --port COM8 --baud 460800 write-flash 0x0 firmware/esp32-c5-n16r8/merged-v1.20.0-ble.bin
 ```
 
-If GitHub CLI is unavailable, create an empty repository on github.com, then run:
+После записи нажми **RESET**. Контрольные суммы находятся в `SHA256SUMS`.
+
+### Отдельные файлы
+
+| Файл | Адрес |
+| --- | ---: |
+| `bootloader.bin` | `0x2000` |
+| `partitions.bin` | `0x8000` |
+| `app-v1.20.0-ble.bin` | `0x10000` |
 
 ```powershell
-git remote add origin https://github.com/<your-user>/esp32-marauder-n16.git
-git branch -M main
-git push -u origin main
+py -m esptool --chip esp32c5 --port COM8 --baud 460800 write-flash 0x2000 firmware/esp32-c5-n16r8/bootloader.bin 0x8000 firmware/esp32-c5-n16r8/partitions.bin 0x10000 firmware/esp32-c5-n16r8/app-v1.20.0-ble.bin
 ```
 
-Keep source files in the repository. Put large firmware packages and future S3 binaries in GitHub **Releases**, with board name, flash size, commit, and SHA-256 in the release notes. Do not commit passwords, tokens, private keys, Arduino caches, or personal absolute paths.
+## Сборка исходников
+
+Нужны Arduino-ESP32 3.3.2 и параметры `FlashSize=16M`, `PartitionScheme=custom`, `PSRAM=enabled`. Скетч — `esp32_marauder/esp32_marauder.ino`; изменения BLE-консоли — в `RemoteConsole.*` и связанных файлах.
+
+## ESP32-S3 N16
+
+См. `docs/S3-N16.md`. Профиль `MARAUDER_MULTIBOARD_S3` предназначен для Flipper Zero Multi Board S3 и не является универсальным профилем для ATewin или другой S3 N16.
+
+## Безопасность
+
+Используй прошивку только на своих устройствах и сетях либо с разрешением владельца. Сканирование и радиотесты могут повлиять на других пользователей. Подмена MAC не отменяет правила доступа к сети.
+
+## Структура
+
+- `esp32_marauder/` — исходники;
+- `firmware/esp32-c5-n16r8/` — файлы прошивки;
+- `partitions/` — таблица разделов 16 MB;
+- `scripts/` — вспомогательные скрипты;
+- `docs/` — заметки по S3 N16.
